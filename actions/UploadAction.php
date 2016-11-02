@@ -10,7 +10,7 @@ use yii\base\InvalidConfigException;
 use yii\helpers\FileHelper;
 use yii\web\BadRequestHttpException;
 use yii\web\Response;
-use yii\web\UploadedFile;
+use vova07\fileapi\components\UploadedFile;
 use Yii;
 
 /**
@@ -87,29 +87,41 @@ class UploadAction extends Action
     public function run()
     {
         if (Yii::$app->request->isPost) {
-            $file = UploadedFile::getInstanceByName($this->paramName);
-            $model = new DynamicModel(compact('file'));
-            $model->addRule('file', $this->_validator, $this->validatorOptions)->validate();
-
-            if ($model->hasErrors()) {
-                $result = [
-                    'error' => $model->getFirstError('file')
-                ];
-            } else {
-                if ($this->unique === true && $model->file->extension) {
-                    $model->file->name = uniqid() . '.' . $model->file->extension;
-                }
-                if ($model->file->saveAs($this->path . $model->file->name)) {
-                    $result = ['name' => $model->file->name];
-                } else {
-                    $result = ['error' => Widget::t('fileapi', 'ERROR_CAN_NOT_UPLOAD_FILE')];
-                }
-            }
+            
             Yii::$app->response->format = Response::FORMAT_JSON;
-
-            return $result;
+            $files = UploadedFile::getInstancesByName($this->paramName);
+            $result = [];
+            foreach ($files as $key => $file)
+            {
+                FileHelper::createDirectory($this->path . $key . DIRECTORY_SEPARATOR);
+                $result[$key]=$this->saveTempFile($file,$key);
+            }
+            return \yii\helpers\ArrayHelper::getValue($result,'original');
         } else {
             throw new BadRequestHttpException('Only POST is allowed');
         }
+    }
+    
+    protected function saveTempFile(UploadedFile $file, $variant)
+    {
+        $model = new DynamicModel(compact('file'));
+        $model->addRule('file', $this->_validator, $this->validatorOptions)->validate();
+
+        if ($model->hasErrors()) {
+            $result = [
+                'error' => $model->getFirstError('file')
+            ];
+        } else {
+            if ($this->unique === true && $model->file->extension) {
+                $model->file->name = uniqid() . '.' . $model->file->extension;
+            }
+            if ($model->file->saveAs($this->path . $variant . DIRECTORY_SEPARATOR . $model->file->name)) {
+                $result = ['name' => $variant . DIRECTORY_SEPARATOR . $model->file->name];
+            } else {
+                $result = ['error' => Widget::t('fileapi', 'ERROR_CAN_NOT_UPLOAD_FILE')];
+            }
+        }         
+
+        return $result;
     }
 }
