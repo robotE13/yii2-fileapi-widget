@@ -2,12 +2,12 @@
 
 namespace vova07\fileapi\behaviors;
 
+use Yii;
 use yii\base\Behavior;
 use yii\base\InvalidParamException;
 use yii\db\ActiveRecord;
 use yii\helpers\FileHelper;
 use yii\validators\Validator;
-use Yii;
 
 /**
  * Class UploadBehavior
@@ -21,13 +21,9 @@ use Yii;
  *     'class' => UploadBehavior::className(),
  *     'attributes' => [
  *         'preview_url' => [
- *             'path' => '@app/web/path',
- *             'tempPath' => '@app/tmp/path',
  *             'url' => '/path/to/file'
  *         ],
  *         'image_url' => [
- *             'path' => '@app/web/path',
- *             'tempPath' => '@app/tmp/path',
  *             'url' => '/path/to/file'
  *         ]
  *     ]
@@ -43,14 +39,17 @@ class UploadBehavior extends Behavior
     const EVENT_AFTER_UPLOAD = 'afterUpload';
 
     /**
-     * Are available 3 indexes:
-     * - `path` Path where the file will be moved.
-     * - `tempPath` Temporary path from where file will be moved.
+     * Are available 1 index:
      * - `url` Path URL where file will be saved.
      *
      * @var array Attributes array
      */
     public $attributes = [];
+
+    /**
+     * @var \vova07\fileapi\FileAPI|array|string FileAPI object or the application component ID of the {@see FileAPI}
+     */
+    public $fileapi = 'fileapi';
 
     /**
      * @var boolean If `true` current attribute file will be deleted
@@ -76,25 +75,22 @@ class UploadBehavior extends Behavior
 
         if (!is_array($this->attributes) || empty($this->attributes)) {
             throw new InvalidParamException('Invalid or empty attributes array.');
-        } else {
-            foreach ($this->attributes as $attribute => $config) {
-                if (!isset($config['path']) || empty($config['path'])) {
-                    throw new InvalidParamException('Path must be set for all attributes.');
-                }
-                if (!isset($config['tempPath']) || empty($config['tempPath'])) {
-                    throw new InvalidParamException('Temporary path must be set for all attributes.');
-                }
-                if (!isset($config['url']) || empty($config['url'])) {
-                    $config['url'] = $this->publish($config['path']);
-                }
-                $this->attributes[$attribute]['path'] = FileHelper::normalizePath(Yii::getAlias($config['path'])) . DIRECTORY_SEPARATOR;
-                $this->attributes[$attribute]['tempPath'] = FileHelper::normalizePath(Yii::getAlias($config['tempPath'])) . DIRECTORY_SEPARATOR;
-                $this->attributes[$attribute]['url'] = rtrim($config['url'], '/') . '/';
+        }
 
-                $validator = Validator::createValidator('string', $this->owner, $attribute);
-                $this->owner->validators[] = $validator;
-                unset($validator);
+        $this->fileapi = \yii\di\Instance::ensure($this->fileapi, \vova07\fileapi\FileAPI::className());
+        foreach ($this->attributes as $attribute => $config)
+        {
+            if (!isset($config['url']) || empty($config['url']))
+            {
+                $config['url'] = $this->publish($config['path']);
             }
+            //$this->attributes[$attribute]['path'] = FileHelper::normalizePath() . DIRECTORY_SEPARATOR;
+            $this->attributes[$attribute]['tempPath'] = FileHelper::normalizePath(Yii::getAlias($this->fileapi->tempPath)) . DIRECTORY_SEPARATOR;
+            $this->attributes[$attribute]['url'] = rtrim($config['url'], '/') . '/';
+
+            $validator = Validator::createValidator('string', $this->owner, $attribute);
+            $this->owner->validators[] = $validator;
+            unset($validator);
         }
     }
 
@@ -140,10 +136,8 @@ class UploadBehavior extends Behavior
 
             if (is_file($tempFile) && FileHelper::createDirectory($this->path($attribute))) {
                 if (rename($tempFile, $file)) {
-                    if ($insert === false && $this->unlinkOnSave === true && $this->owner->getOldAttribute(
-                            $attribute
-                        )
-                    ) {
+                    if ($insert === false && $this->unlinkOnSave === true && $this->owner->getOldAttribute($attribute))
+                    {
                         $this->deleteFile($this->oldFile($attribute));
                     }
                     $this->triggerEventAfterUpload();

@@ -34,7 +34,7 @@ namespace vova07\fileapi\components;
 class UploadedFile extends \yii\web\UploadedFile
 {
     private static $_files;
-    
+
     public static function getInstancesByName($name)
     {
         $files = self::loadFiles();
@@ -50,7 +50,7 @@ class UploadedFile extends \yii\web\UploadedFile
         }
         return $results;
     }
-    
+
     /**
      * Creates UploadedFile instances from $_FILE.
      * @return array the UploadedFile instances
@@ -67,7 +67,7 @@ class UploadedFile extends \yii\web\UploadedFile
         }
         return self::$_files;
     }
-    
+
     /**
      * Creates UploadedFile instances from $_FILE recursively.
      * @param string $key key for identifying uploaded file: class name and sub-array indexes

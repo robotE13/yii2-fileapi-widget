@@ -8,11 +8,15 @@
         {
             "name": "Crudu Vasile",
             "email": "bazillio07@yandex.ru"
+        },
+        {
+            "name": "Evgenii Dudal",
+            "email": "wolfstrace@gmail.com"
         }
     ],
     "support": {
-        "issues": "https://github.com/vova07/yii2-fileapi-widget/issues?state=open",
-        "source": "https://github.com/vova07/yii2-fileapi-widget"
+        "issues": "https://github.com/robotE13/yii2-fileapi-widget/issues?state=open",
+        "source": "https://github.com/robotE13/yii2-fileapi-widget/tree/feature-flysystem"
     },
     "require": {
         "yiisoft/yii2": "*",

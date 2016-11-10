@@ -5,13 +5,14 @@ namespace vova07\fileapi\actions;
 use Yii;
 use yii\helpers\ArrayHelper;
 use vova07\fileapi\Widget;
+use vova07\fileapi\FileAPI;
 use yii\base\Action;
 use yii\base\DynamicModel;
 use yii\base\InvalidCallException;
-use yii\base\InvalidConfigException;
 use yii\helpers\FileHelper;
 use yii\web\BadRequestHttpException;
 use yii\web\Response;
+use yii\di\Instance;
 use vova07\fileapi\components\UploadedFile;
 
 /**
@@ -33,11 +34,11 @@ use vova07\fileapi\components\UploadedFile;
  */
 class UploadAction extends Action
 {
-    const RESULT_GLUE = '!;';
+    const VARIANT_SEPARATOR = '!_!';
     /**
-     * @var string Path to directory where files will be uploaded
+     * @var FileAPI|array|string FileAPI object or the application component ID of the {@see FileAPI}
      */
-    public $path;
+    public $fileapi = 'fileapi';
 
     /**
      * @var string Validator name
@@ -58,11 +59,16 @@ class UploadAction extends Action
      * @var array Model validator options
      */
     public $validatorOptions = [];
-    
+
     /**
      * @var boolean saving result
      */
     protected $result = true;
+
+    /**
+     * @var string Path to directory where temp files will be uploaded.
+     */
+    protected $path;
 
     /**
      * @var string Model validator name
@@ -74,15 +80,13 @@ class UploadAction extends Action
      */
     public function init()
     {
-        if ($this->path === null) {
-            throw new InvalidConfigException('The "path" attribute must be set.');
-        } else {
-            $this->path = FileHelper::normalizePath(Yii::getAlias($this->path)) . DIRECTORY_SEPARATOR;
+        $this->fileapi = Instance::ensure($this->fileapi, FileAPI::className());
+        $this->path = FileHelper::normalizePath(Yii::getAlias($this->fileapi->tempPath)) . DIRECTORY_SEPARATOR;
 
-            if (!FileHelper::createDirectory($this->path)) {
-                throw new InvalidCallException("Directory specified in 'path' attribute doesn't exist or cannot be created.");
-            }
+        if (!FileHelper::createDirectory($this->path)) {
+            throw new InvalidCallException("Directory specified in 'path' attribute doesn't exist or cannot be created.");
         }
+
         if ($this->uploadOnlyImage !== true) {
             $this->_validator = 'file';
         }
@@ -94,45 +98,42 @@ class UploadAction extends Action
     public function run()
     {
         if (Yii::$app->request->isPost) {
-            
             Yii::$app->response->format = Response::FORMAT_JSON;
             $files = UploadedFile::getInstancesByName($this->paramName);
-            $results = [];
-            foreach ($files as $key => $file)
-            {
-                FileHelper::createDirectory($this->path . $key . DIRECTORY_SEPARATOR);
-                $results[]=$this->saveTempFile($file,$key);
-                if(!$this->result)
-                {
-                    return ['error' => array_pop($results)];
-                }
-            }
-            return ['name'=>implode(self::RESULT_GLUE, $results)];
+
+            return $this->saveTempFiles($files);
+
         } else {
             throw new BadRequestHttpException('Only POST is allowed');
         }
     }
-    
-    protected function saveTempFile(UploadedFile $file, $variant)
-    {
-        $model = new DynamicModel(compact('file'));
-        $model->addRule('file', $this->_validator, $this->validatorOptions)->validate();
 
-        if ($model->hasErrors()) {
-            $this->result = false;
-            $result = $model->getFirstError('file');
-        } else {
-            if ($this->unique === true && $model->file->extension) {
-                $model->file->name = uniqid() . '.' . $model->file->extension;
+    /**
+     * Save uploaded files into temp directory.
+     * @param UploadedFile[] $files
+     * @return [] uploaded file name or error text
+     */
+    protected function saveTempFiles($files)
+    {
+        $basename = '';
+        while (($file = current($files)) && !isset($result)) {
+            $model = new DynamicModel(compact('file'));
+            $model->addRule('file', $this->_validator, $this->validatorOptions);
+            if(empty($basename))
+            {
+                $basename = $this->unique ? uniqid() . ".{$model->file->extension}" : $model->file->name;
             }
-            if ($model->file->saveAs($this->path . $variant . DIRECTORY_SEPARATOR . $model->file->name)) {
-                $result = $variant . DIRECTORY_SEPARATOR . $model->file->name;
-            } else {
-                $this->result = false;
+
+            if(!$model->validate())
+            {
+                $result = $model->getFirstError('file');
+            }
+            if(!$model->file->saveAs($this->path . key($files) . self::VARIANT_SEPARATOR . $basename))
+            {
                 $result = Widget::t('fileapi', 'ERROR_CAN_NOT_UPLOAD_FILE');
             }
-        }         
-
-        return $result;
+            next($files);
+        }
+        return isset($result)?['error'=>$result]:['name'=>$basename];
     }
 }

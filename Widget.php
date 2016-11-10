@@ -2,13 +2,14 @@
 
 namespace vova07\fileapi;
 
+use Yii;
+use yii\di\Instance;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Url;
 use yii\helpers\Html;
 use yii\helpers\Json;
 use yii\web\JsExpression;
 use yii\widgets\InputWidget;
-use Yii;
 
 /**
  * FileAPI Class
@@ -48,6 +49,11 @@ class Widget extends InputWidget
      * @var string The parameter name for the file form data (the request argument name)
      */
     public $paramName = 'file';
+
+    /**
+     * @var FileAPI|array|string FileAPI object or the application component ID of the {@see FileAPI}
+     */
+    public $fileapi = 'fileapi';
 
     /**
      * Widget settings.
@@ -201,6 +207,14 @@ class Widget extends InputWidget
         $request = Yii::$app->getRequest();
 
         $this->registerTranslations();
+
+        $this->fileapi = Instance::ensure($this->fileapi,  FileAPI::className());
+
+        if(isset($this->fileapi->imageTransforms))
+        {
+            $this->settings['imageTransform'] = $this->fileapi->imageTransforms;
+            $this->settings['imageOriginal'] = $this->fileapi->imageOriginal;
+        }
 
         if ($request->enableCsrfValidation === true) {
             $this->settings['data'][$request->csrfParam] = $request->getCsrfToken();
