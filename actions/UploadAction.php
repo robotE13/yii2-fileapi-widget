@@ -25,7 +25,6 @@ use vova07\fileapi\components\UploadedFile;
  *     return [
  *         'upload' => [
  *             'class' => 'vova07\fileapi\actions\UploadAction',
- *             'path' => '@path/to/files',
  *             'uploadOnlyImage' => false
  *         ]
  *     ];
@@ -61,14 +60,14 @@ class UploadAction extends Action
     public $validatorOptions = [];
 
     /**
-     * @var boolean saving result
-     */
-    protected $result = true;
-
-    /**
      * @var string Path to directory where temp files will be uploaded.
      */
     protected $path;
+
+    /**
+     * @var string saving result
+     */
+    private $_result = 'No files';
 
     /**
      * @var string Model validator name
@@ -101,7 +100,12 @@ class UploadAction extends Action
             Yii::$app->response->format = Response::FORMAT_JSON;
             $files = UploadedFile::getInstancesByName($this->paramName);
 
-            return $this->saveTempFiles($files);
+            if($files && $this->saveTempFiles($files))
+            {
+                return ['name'=> $this->_result];
+            }else{
+                return ['error'=>$this->_result];
+            }
 
         } else {
             throw new BadRequestHttpException('Only POST is allowed');
@@ -115,25 +119,29 @@ class UploadAction extends Action
      */
     protected function saveTempFiles($files)
     {
-        $basename = '';
-        while (($file = current($files)) && !isset($result)) {
+        foreach ($files as $key => $file)
+        {
             $model = new DynamicModel(compact('file'));
             $model->addRule('file', $this->_validator, $this->validatorOptions);
-            if(empty($basename))
+            if(!isset($basename))
             {
                 $basename = $this->unique ? uniqid() . ".{$model->file->extension}" : $model->file->name;
             }
 
             if(!$model->validate())
             {
-                $result = $model->getFirstError('file');
+                $this->_result = $model->getFirstError('file');
+                return false;
             }
-            if(!$model->file->saveAs($this->path . key($files) . self::VARIANT_SEPARATOR . $basename))
+
+            $variant = $key === 0?'original':$key;
+            if(!$model->file->saveAs($this->path . $variant . self::VARIANT_SEPARATOR . $basename))
             {
-                $result = Widget::t('fileapi', 'ERROR_CAN_NOT_UPLOAD_FILE');
+                $this->_result = Widget::t('fileapi', 'ERROR_CAN_NOT_UPLOAD_FILE');
+                return false;
             }
-            next($files);
         }
-        return isset($result)?['error'=>$result]:['name'=>$basename];
+        $this->_result = $basename;
+        return true;
     }
 }

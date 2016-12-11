@@ -35,7 +35,8 @@ use League\Flysystem\Filesystem;
  *
  * @author Tartharia
  */
-class FileAPI extends \yii\base\Component{
+class FileAPI extends \yii\base\Component
+{
 
     /**
      * Path alias for temporary files directory.
@@ -53,7 +54,7 @@ class FileAPI extends \yii\base\Component{
      * Rules of image transformation on the client {@see https://github.com/mailru/FileAPI#imagetransformobject-1}
      * @var array ['variantName'=>['maxWidth'=>800, 'maxHeight'=>600],'variant2Name'=>[...]
      */
-    public $imageTransforms;
+    public $imageTransforms = [];
 
     /**
      * Sent to the server the original image or not, if defined imageTransform option.
@@ -61,7 +62,12 @@ class FileAPI extends \yii\base\Component{
      */
     public $imageOriginal = true;
 
-    public function init() {
+    public function init()
+    {
+        if($this->imageTransforms && !$this->imageOriginal && !key_exists('original', $this->imageTransforms))
+        {
+            throw new \yii\base\InvalidConfigException('When disabled the transmission of the original image, and set transformation variants, you must specify the key "original". This image will be considered as the base image.');
+        }
         if($this->filesystem instanceof \Closure)
         {
             $this->filesystem = call_user_func($this->filesystem);

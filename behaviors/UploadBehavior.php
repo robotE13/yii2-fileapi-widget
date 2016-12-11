@@ -7,12 +7,16 @@ use yii\base\Behavior;
 use yii\base\InvalidParamException;
 use yii\db\ActiveRecord;
 use yii\helpers\FileHelper;
+use yii\helpers\ArrayHelper;
 use yii\validators\Validator;
+use vova07\fileapi\actions\UploadAction;
 
 /**
  * Class UploadBehavior
  * @package vova07\fileapi\behaviors
  * Uploading file behavior.
+ *
+ * @property ActiveRecord $owner Description
  *
  * Usage:
  * ```
@@ -67,6 +71,12 @@ class UploadBehavior extends Behavior
     protected static $_cachePublishPath = [];
 
     /**
+     *
+     * @var array
+     */
+    private $_variants = [];
+
+    /**
      * @inheritdoc
      */
     public function attach($owner)
@@ -80,13 +90,13 @@ class UploadBehavior extends Behavior
         $this->fileapi = \yii\di\Instance::ensure($this->fileapi, \vova07\fileapi\FileAPI::className());
         foreach ($this->attributes as $attribute => $config)
         {
-            if (!isset($config['url']) || empty($config['url']))
+            /*if (!isset($config['url']) || empty($config['url']))
             {
                 $config['url'] = $this->publish($config['path']);
-            }
-            //$this->attributes[$attribute]['path'] = FileHelper::normalizePath() . DIRECTORY_SEPARATOR;
+            }*/
+            //$this->attributes[$attribute]['path'] = $this->fileapi->filesystem->getAdapter()->getPathPrefix();
             $this->attributes[$attribute]['tempPath'] = FileHelper::normalizePath(Yii::getAlias($this->fileapi->tempPath)) . DIRECTORY_SEPARATOR;
-            $this->attributes[$attribute]['url'] = rtrim($config['url'], '/') . '/';
+            //$this->attributes[$attribute]['url'] = rtrim($config['url'], '/') . '/';
 
             $validator = Validator::createValidator('string', $this->owner, $attribute);
             $this->owner->validators[] = $validator;
@@ -113,58 +123,90 @@ class UploadBehavior extends Behavior
     {
         foreach ($this->attributes as $attribute => $config) {
             if ($this->owner->$attribute) {
-                $this->saveFile($attribute);
+                $this->saveAttribute($attribute);
             }
         }
     }
 
     /**
-     * Save model attribute file.
+     * Save file attribute.
      *
      * @param string $attribute Attribute name
-     * @param bool $insert `true` on insert record
      */
-    protected function saveFile($attribute, $insert = true)
+    protected function saveAttribute($attribute)
     {
-        if (empty($this->owner->$attribute)) {
-            if ($insert !== true) {
-                $this->deleteFile($this->oldFile($attribute));
-            }
-        } else {
-            $tempFile = $this->tempFile($attribute);
-            $file = $this->file($attribute);
-
-            if (is_file($tempFile) && FileHelper::createDirectory($this->path($attribute))) {
-                if (rename($tempFile, $file)) {
-                    if ($insert === false && $this->unlinkOnSave === true && $this->owner->getOldAttribute($attribute))
-                    {
-                        $this->deleteFile($this->oldFile($attribute));
-                    }
-                    $this->triggerEventAfterUpload();
-                } else {
-                    unset($this->owner->$attribute);
-                }
-            } elseif ($insert === true) {
-                unset($this->owner->$attribute);
-            } else {
+        if(!empty($this->owner->getAttribute($attribute)))
+        {
+            if($this->saveFile($attribute))
+            {
+                $this->triggerEventAfterUpload();
+            }else{
                 $this->owner->setAttribute($attribute, $this->owner->getOldAttribute($attribute));
+                return false;
             }
         }
+        if ($this->unlinkOnSave && $this->owner->isAttributeChanged($attribute) && !empty($this->owner->getOldAttribute($attribute)))
+        {
+            foreach ($this->getVariants() as $variant)
+            {
+                $this->deleteFile($this->oldFile($attribute,$variant));
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Итак. 1. Если ставить трансформацию на клиенте и включить передачу оригинала то будут ключи из вариантов трансформации + original
+     * 2. Если передачу оригинала отключить, то будут только ключи из трансформации(!) основной файл тогда должен быть задан.
+     * 3. При отключенной трансформации сохранится только один файл с ключом original
+     * В любом случае то что идет с ключом original считается основным файлом.
+     * @param string $attribute
+     */
+    protected function saveFile($attribute)
+    {
+        $mimeType = FileHelper::getMimeType($this->tempFile($attribute,'original'));
+        foreach ($this->getVariants() as $variant){
+            if(!is_file($this->tempFile($attribute,$variant)))
+            {
+                return false;
+            }
+        }
+        foreach ($this->getVariants() as $variant) {
+            $tmpFile = $this->tempFile($attribute,$variant);
+            $resource = fopen($tmpFile,'r');
+            $this->fileapi->filesystem->writeStream($this->file($attribute,$variant), $resource,['ContentType'=> $mimeType]);
+            fclose($resource);
+            unlink($tmpFile);
+        }
+        return true;
+    }
+
+    /**
+     *
+     * @return array
+     */
+    private function getVariants()
+    {
+        if(!$this->_variants)
+        {
+            $this->_variants = ArrayHelper::merge(['original'], array_keys($this->fileapi->imageTransforms));
+        }
+        return $this->_variants;
     }
 
     /**
      * Delete specified file.
      *
-     * @param string $file File path
-     *
+     * @param string $file File name
      * @return bool `true` if file was successfully deleted
      */
     protected function deleteFile($file)
     {
-        if (is_file($file)) {
-            return unlink($file);
+        if($this->fileapi->filesystem->has($file))
+        {
+            return $this->fileapi->filesystem->delete($file);
         }
-
         return false;
     }
 
@@ -173,19 +215,19 @@ class UploadBehavior extends Behavior
      *
      * @return string Old file path
      */
-    public function oldFile($attribute)
+    public function oldFile($attribute,$variant)
     {
-        return $this->path($attribute) . $this->owner->getOldAttribute($attribute);
+        return $this->path($variant) . $this->owner->getOldAttribute($attribute);
     }
 
     /**
-     * @param string $attribute Attribute name
+     * @param string $variant Attribute name
      *
      * @return string Path to file
      */
-    public function path($attribute)
+    public function path($variant)
     {
-        return $this->attributes[$attribute]['path'];
+        return $variant == 'original'?'': $variant . DIRECTORY_SEPARATOR;
     }
 
     /**
@@ -193,9 +235,9 @@ class UploadBehavior extends Behavior
      *
      * @return string Temporary file path
      */
-    public function tempFile($attribute)
+    public function tempFile($attribute, $variant)
     {
-        return $this->tempPath($attribute) . $this->owner->$attribute;
+        return $this->tempPath($attribute) . $variant . UploadAction::VARIANT_SEPARATOR . $this->owner->$attribute;
     }
 
     /**
@@ -213,9 +255,9 @@ class UploadBehavior extends Behavior
      *
      * @return string File path
      */
-    public function file($attribute)
+    public function file($attribute,$variant)
     {
-        return $this->path($attribute) . $this->owner->$attribute;
+        return $this->path($variant) . $this->owner->$attribute;
     }
 
     /**
@@ -248,7 +290,7 @@ class UploadBehavior extends Behavior
     {
         foreach ($this->attributes as $attribute => $config) {
             if ($this->owner->isAttributeChanged($attribute)) {
-                $this->saveFile($attribute, false);
+                $this->saveAttribute($attribute);
             }
         }
     }
@@ -261,7 +303,9 @@ class UploadBehavior extends Behavior
         if ($this->unlinkOnDelete) {
             foreach ($this->attributes as $attribute => $config) {
                 if ($this->owner->$attribute) {
-                    $this->deleteFile($this->file($attribute));
+                    foreach ($this->getVariants() as $variant) {
+                        $this->deleteFile($this->file($attribute,$variant));
+                    }
                 }
             }
         }
@@ -290,10 +334,14 @@ class UploadBehavior extends Behavior
      *
      * @return null|string Full attribute URL
      */
-    public function urlAttribute($attribute)
+    public function urlAttribute($attribute,$variant = '')
     {
+        if(!empty($variant))
+        {
+            $variant .= '/';
+        }
         if (isset($this->attributes[$attribute]) && $this->owner->$attribute) {
-            return $this->attributes[$attribute]['url'] . $this->owner->$attribute;
+            return $this->attributes[$attribute]['url'] . "{$variant}{$this->owner->$attribute}";
         }
 
         return null;
@@ -306,7 +354,7 @@ class UploadBehavior extends Behavior
      */
     public function getMimeType($attribute)
     {
-        return FileHelper::getMimeType($this->file($attribute));
+        return $this->fileapi->filesystem->getMimetype($this->file($attribute,'original'));
     }
 
     /**
@@ -316,6 +364,6 @@ class UploadBehavior extends Behavior
      */
     public function fileExists($attribute)
     {
-        return file_exists($this->file($attribute));
+        return $this->fileapi->filesystem->has($this->file($attribute,'original'));
     }
 }
