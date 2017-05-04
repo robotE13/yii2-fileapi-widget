@@ -3,7 +3,6 @@
 namespace vova07\fileapi\actions;
 
 use Yii;
-use yii\helpers\ArrayHelper;
 use vova07\fileapi\Widget;
 use vova07\fileapi\FileAPI;
 use yii\base\Action;

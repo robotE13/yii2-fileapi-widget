@@ -190,7 +190,7 @@ class UploadBehavior extends Behavior
     {
         if(!$this->_variants)
         {
-            $this->_variants = ArrayHelper::merge(['original'], array_keys($this->fileapi->imageTransforms));
+            $this->_variants = array_unique(ArrayHelper::merge(['original'], array_keys($this->fileapi->imageTransforms)));
         }
         return $this->_variants;
     }
