@@ -56,6 +56,12 @@ class Widget extends InputWidget
     public $fileapi = 'fileapi';
 
     /**
+     *
+     * @var string preview image variant name. {@see FileAPI::imageTransforms}
+     */
+    public $previewVariant = '';
+
+    /**
      * Widget settings.
      *
      * @var array {@link https://github.com/RubaXa/jquery.fileapi/ FileAPI options}
@@ -313,7 +319,7 @@ class Widget extends InputWidget
         if (!isset($this->settings['multiple']) || $this->settings['multiple'] === false) {
             if ($this->hasModel() && $this->model->{$this->attributeName} && $this->model->fileExists($this->attributeName)) {
                 $this->settings['files'][] = [
-                    'src' => $this->model->urlAttribute($this->attributeName),
+                    'src' => $this->model->urlAttribute($this->attributeName, $this->previewVariant),
                     'name' => $this->model->{$this->attributeName},
                     'type' => $this->model->getMimeType($this->attributeName)
                 ];

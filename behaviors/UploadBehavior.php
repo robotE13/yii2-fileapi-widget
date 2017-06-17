@@ -341,7 +341,7 @@ class UploadBehavior extends Behavior
             $variant .= '/';
         }
         if (isset($this->attributes[$attribute]) && $this->owner->$attribute) {
-            return (isset($this->fileapi->url)?"{$this->fileapi->url}/":$this->attributes[$attribute]['url']) . "{$variant}{$this->owner->$attribute}";
+            return (isset($this->fileapi->url)?"{$this->fileapi->url}":$this->attributes[$attribute]['url']) . "{$variant}{$this->owner->$attribute}";
         }
 
         return null;
