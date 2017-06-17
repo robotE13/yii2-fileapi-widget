@@ -44,6 +44,8 @@ class FileAPI extends \yii\base\Component
      */
     public $tempPath = '@app/runtime';
 
+    public $url;
+
     /**
      * Filesystem component {@see http://flysystem.thephpleague.com/}.
      * @var \League\Flysystem\Filesystem|\Closure|string
