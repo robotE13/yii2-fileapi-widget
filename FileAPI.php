@@ -44,6 +44,10 @@ class FileAPI extends \yii\base\Component
      */
     public $tempPath = '@app/runtime';
 
+    /**
+     * Url or alias.
+     * @var string
+     */
     public $url;
 
     /**
@@ -75,5 +79,6 @@ class FileAPI extends \yii\base\Component
             $this->filesystem = call_user_func($this->filesystem);
         }
         $this->filesystem = Instance::ensure($this->filesystem, '\League\Flysystem\Filesystem');
+        $this->url = Yii::getAlias($this->url);
     }
 }
