@@ -20,7 +20,7 @@
     },
     "require": {
         "yiisoft/yii2": "*",
-        "league/flysystem": "@stable",
+        "league/flysystem": "~1.1.3",
         "rubaxa/fileapi": "*"
     },
     "autoload": {
